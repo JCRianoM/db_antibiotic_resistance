@@ -1,0 +1,380 @@
+---
+title: "Taller 1: Análisis Multivariado"
+subtitle: "Introducción y graficas para el análisis mulivariado"
+author: "Julián Camilo Riaño Moreno"
+date: "`r format(Sys.Date(), '%A, %B %d, %Y')`"
+output:
+  pdf_document: 
+    keep_tex: yes
+    toc: yes
+    toc_depth: 3
+  html_document: 
+    keep_md: true
+    toc: yes
+    toc_float: true
+    code_folding: hide
+  keep_tex: yes
+  word_document: default
+  fig_cap: yes
+header-includes:
+- \usepackage{float}
+- \floatplacement{figure}{H}
+---
+
+```{r setup, include=FALSE}
+# define knitr options
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = TRUE, fig.pos= "h")
+```
+
+```{r, include=FALSE}
+# instalar paquetes. 
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(kableExtra)
+library(knitr)
+library(ggcorrplot)
+library(ggthemes)
+library(GGally)
+library(pander) ##paquete para tablas pandoc
+library(reshape2)##arreglar imagenes
+library(ggrepel)
+library(corrplot)
+library(pracma)
+library(aplpack)
+library(mvnormtest)
+```
+
+```{r carga de datos y construcción de datos para ejercicio, include = FALSE}
+E.coli_K.pneu_db <- read.csv2('E.coli_&_K.pneu_db', header=TRUE)
+
+multi_var1 <- as_tibble(E.coli_K.pneu_db[, -c(1:4, 9)])
+```
+
+```{r función para modificación de gráfico UPPER en correlaciones, include=FALSE}
+##función para poner los colores de 'ggcorr' a 'ggpair'
+my_fnUPP <- function(data, mapping, method="p", use="pairwise", ...){
+    # grab data
+    x <- eval_data_col(data, mapping$x)
+    y <- eval_data_col(data, mapping$y)
+    
+    # calculate correlation
+    corr <- cor(x, y, method=method, use=use)
+    
+    # calculate colour based on correlation value
+    # Here I have set a correlation of minus one to blue, 
+    # zero to white, and one to red 
+    # Change this to suit: possibly extend to add as an argument of `my_fn`
+    colFn <- colorRampPalette(c("blue", "white", "red"), interpolate ='spline')
+    fill <- colFn(100)[findInterval(corr, seq(-1, 1, length=100))]
+    
+    ggally_cor(data = data, mapping = mapping, ...) + 
+        theme_void() +
+        theme(panel.background = element_rect(fill=fill))
+}
+
+```
+
+```{r función para modificación de gráfico DIAG en correlaciones, include=FALSE}
+##Función para adicionar a un histograma con una curva normal en 'diag' ggpairs
+diag_fun <- function(data, mapping, hist=list(), ...){
+    
+    X = eval_data_col(data, mapping$x)
+    mn = mean(X)
+    s = sd(X)
+    
+    ggplot(data, mapping) + 
+        do.call(function(...) geom_histogram(aes(y =..density..), ...), hist) +
+        stat_function(fun = dnorm, args = list(mean = mn, sd = s), ...)
+}
+
+```
+
+```{r función para modificación de gráfico LOWER en correlaciones, include=FALSE}
+##Función modificar LOWER en Correlaciones
+my_fnLOW <- function(data, mapping, ...){
+    p <- ggplot(data = data, mapping = mapping) + 
+        geom_point(size = .7) + 
+        geom_smooth(method=loess, fill="red", color="red", ...) +
+        geom_smooth(method=lm, fill="blue", color="blue", ...)
+    p
+}
+
+```
+
+## Actividad #1
+>Busque un conjunto de datos multivariados relacionados con un área de conocimiento
+de su dominio que tenga al menos 50 observaciones, 5 variables numéricas y 3
+categóricas.
+
+## Especificaciones sobre la base de datos utilizada.
+Para la elaboración de las actividades propuestas en el curso de análisis multivariado, se decidió utiliza una base de datos que se desea utilizar para un trabajo de investigación en marco de la _especialización en estadística aplicada_. 
+
+Los datos para estos análisis son obtendios de la iniciativa _Data from the ECDC Surveillance Atlas_ para seguimiento de la resistencia a antibióticos en la unión europea llevado acabo por el _European Centre for Disease Prevention and Control_. Esta información se puede descargar desde el siguiente link: (https://atlas.ecdc.europa.eu/public/index.aspx?Dataset=27&HealthTopic=4). 
+
+La base de datos original cuenta con 67542 observaciones y 9 variables (_HealthTopic; Population; Indicator; Unit; Time; RegionCode; RegionName; NumValue; TxtValue_). 
+
+A través de una limpieza exhaustiva y reorganización de esta base de datos, se llegó a obtener una base de datos de 3478 observaciones y 72 variables, estas 72 variables corresponde a al tipo de _Indicador_ por _Antibiótico_, por ejemplo: nombre de la columna o variable _Vancomycin_r_percentage_, esto corresponde al porcentaje de resistencia a la vancomicina. 
+Estas variables son para cara cada una de las 8 bacterias reportadas en el informe 
+(_Acinetobacter spp; Enterococcus faecalis; Enterococcus faecium; Escherichia coli; Klebsiella pneumoniae; Pseudomonas aeruginosa; Staphylococcus aureus; Streptococcus pneumoniae_) y para los 30 países involucrados (_Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia,  Finland, France,  Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Luxembourg, Malta, Netherlands, Norway, Poland, Portugal, Romania, Slovakia, Slovenia, Spain, Sweden, United Kingdom_); esta información ha sido recolectada en los años 2000 - 2018.
+
+Se realizó un reanálisis de la base de datos, se eliminaron las variables que no eran informativas como por ejemplo las que se referían al número de aislados en cada una de estas; se eliminaron sin información (_NAs_); únicamente se dejaron las variables que correspondían al % de resistencia para cada uno de los antibióticos reportados para cada una de las bacterias[^1].
+
+[^1]: para tratar cada bacteria se utilizan diferentes antibióticos, de manera que los % de resistencia reportados en esta base de datosn son algunos diferentes (algunos son los mismos) entre bacterias. 
+
+
+A continuación, se decidió seleccionar únicamente dos bacterias en las que fueron evaluados los perfiles de resistencia a los mismos antibióticos, a saber: Escherichia coli; Klebsiella pneumoniae. Las cuales además registran los mayores números de observaciones (después de la remoción de _NAs_), 460 y 384 respectivamente. La variables de esta nueva base de datos son : Bacteria, Year, Code_C, Country, Aminoglycosides, Carbapenems, Fluoroquinolones, cephalos_3er_gen. 
+
+Adicionalmente se realizón un _web scrapping_ de la página: ('https://www.worldatlas.com/articles/the-four-european-regions-as-defined-by-the-united-nations-geoscheme-for-europe.html'), para obtener las regiones del continente europeo al que corresponde del que se obtuvieron observaciones. Se realizó un _match_ por la variable `Country` y se adicionó una nueva variable llamada `Region` a la base de datos final. Las especificaciones de las variables de la base datos final se encuentran en la tabla 1. 
+
+```{r tabla de descripción de la variables, echo=FALSE, message=FALSE, results='asis'}
+namevar <- c('Bacteria', 'Year', 'Code_C', 'Country', 'Region','Aminoglycosides', 
+                  'Carbapenems', 'Fluoroquinolones', 'cephalos_3er_gen')
+def_var <- c('Especie de la bacteria',
+             'Ano', 'Codigo del pais', 'Nombre del pais', 'Nombre de la region', 
+             'Porcentaje de resistencia', 'Porcentaje de resistencia', 
+             'Porcentaje de resistencia', 'Porcentaje de resistencia' )
+
+unidadvar <- c('---','Entero', '---', '---', '---', '%', '%', '%', '%')
+desc_var <- c('Escherichia coli o Klebsiella pneumoniae', 
+              '2000-2018', '---', '---', 
+              'Eastern o Northern o Southern o Western', '---', '---', '---', '---')
+
+tipo_var <- c('Categorica nominal', 'Categorica nominal', 'Categorica nominal', 
+              'Categorica nominal', 'Categorica nominal', 'Cuantitativa continua',
+              'Cuantitativa continua', 'Cuantitativa continua', 'Cuantitativa continua' )
+
+names_dfvar <- c('Nombre de variable', 'Definicion', 
+                  'Descripción', 'Unidad', 'Tipo de variable')
+
+df_vars <- data.frame(namevar, def_var, desc_var, unidadvar, tipo_var)
+colnames(df_vars) <- names_dfvar
+
+pandoc.table(df_vars, 
+             caption="Organizacion de las variables de la base de datos", 
+             align = 'c', 
+             split.table = Inf) 
+```
+
+### Primer pregunta:
+>Encuentre el vector de medias $\bar{x}$, la matriz de covarianzas $S$ y la matriz
+de correlaciones R de las variables numéricas. Interprete los resultados.
+
+La tabla 2. muestra el vector de medias para las variables de estudio. 
+
+```{r vector de medias, echo=FALSE, message=FALSE, results='asis'}
+vect_mean <- apply(multi_var1, 2, mean) 
+
+pandoc.table(vect_mean,
+             caption = 'Vector de medias',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+```
+
+
+```{r primer pregunta_tabla1, echo=FALSE, message=FALSE, results='asis'}
+R_multi1 <- round(cor(multi_var1), 3)
+
+pandoc.table(R_multi1,
+             caption = 'Matriz de correlación entre las variables',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+```
+
+
+```{r primer pregunta_tabla2, echo=FALSE, message=FALSE, results='asis'}
+v_multi1 <- round(var(multi_var1), 3)
+
+pandoc.table(v_multi1,
+             caption = 'Matriz de covarianza entre las variables',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+```
+
+
+### Segunda pregunta:
+>Encuentre la varianza muestral generalizada $|S|$ y la varianza muestral
+total $tr(S)$. Comente sus resultados.
+
+La varianza muestral generalizada se obtiene a través de la aplicación de la función `det`(determinante) a la matriz de covarianzas, con le siguiente resultado:
+$$
+|S| = -1e^{-08}
+$$
+El resultado de $|S|$ es muy cercano a $0$, lo que indica que cada variable es una combinación lineal de las otras, por lo tanto, las variables son linealmente dependientes, es decir la independencia entre las variables es casi nula (esto hace que los datos puedan ser estudiados a través de  análisis como PCA).
+
+Seguidamente, Se obtiene la varianza  muestral total a través de la sumatoria de la diagonal de la matriz de varianzas, obteniendo el siguiente resultado:
+
+
+$$
+    tr|S| = 0.95
+$$
+
+Esto indica que la variabilidad en los datos es mínima ya que el valor de $tr|S|$ es cercano  $0$, es decir, los datos son cercanos a la media. 
+
+### Tercera pregunta:
+>Construya las siguientes gráficas para los datos:
+
+#### (a) una matriz de diagramas de dispersión.
+
+
+
+
+La figura 1. corresponde a una gráfica de dispersión y correlación para las variables dadas. 
+
+```{r Código para diagrama de dispresión y correlaciones, message=FALSE, echo=FALSE, fig.cap= 'Gráfica de dispersión y correlaciones'}
+### Esta produce con colores de ggcorr + introducción de una curva de normalidad en
+#'diag'. 
+Graph_cor_AB <- ggpairs(multi_var1, 
+                    #title = 'Diagrama de dispresión y correlaciones',
+                    axisLabels = 'show', 
+                    upper = list(continuous = my_fnUPP), 
+                    diag = list(continuous = diag_fun),
+                    lower = list(continuous = my_fnLOW)) +
+                    theme(
+                    plot.title = element_text(size = 12, 
+                                              face = "bold", 
+                                              hjust = 0.5, 
+                                              vjust=2.5),
+        )
+Graph_cor_AB 
+```
+
+El resultado de la figura 1. da información valiosa para el desarrollo del resto de las actividades. En primera medida como se puede observar y anticipar las variables de estudio no siguen una distribución normal, e incluso es posible concluir que la variable `Carbapenems` es la menos informativa ya que exhibe la menor correlación con las demás; en las regresiones lineales realizadas entre variables (líneas azules: método `lm` y rojas: metodo local `loess`, en las dispersiones de la cuadricula inferior) se observa una pobre relación lineal. Inclusive se evidencia poca dispersión de los datos de esta variable. Esto indica que las bacterias estudiadas cuando son resistentes a los Carbapenems, necesariamente no son resistentes a otros antibióticos. 
+
+Diferente a lo observado para las cefalosporinas de 3er generación. Como se puede observar en la figura 1. existe una alta correlación y relación lineal entre la variables `Cephalos_3er_gen` y `Aminoglycosides` (Corr = 0.962) y `Cephalos_3er_gen` y `Fluoroquinolones` (Corr = 0.837). Lo que indica que cuando hay resistencia a Cefalosporia de 3er generación también se espera que se de resistencia a Aminoglicosidos y Fluoroquinolonas. 
+
+#### (b) diagrama de estrellas
+
+```{r Código para diagrama de estrellas, message=FALSE, echo=FALSE, fig.cap= 'Diagrama de estrellas para las variables estudiadas'}
+palette(rainbow(12, s=0.6, v=0.75))
+stars(multi_var1, 
+      len = 1.4, 
+      key.loc = c(42, 0.2),
+      main = "Estrellas: resistencia_AB E.Coli & K.Pneumoniae", 
+      draw.segments = TRUE,
+      cex = 0.5, 
+      scale = TRUE, 
+      ncol = 38)
+```
+
+La figura 2. muestra por cada observación el peso que tiene cada variable a través de las proporciones mostradas en los segmentos que conforman la estrella. Como se puede observar, aunque con la cantidad de datos que se están estudiando es difícil visualizar el diagrama adecuadamente, las observaciones donde el porcentaje de resistencia es mayor (radio de la estrella mayor), se evidencia el poco peso de la variable `Carbapenems` esto muy problemente está dado a la baja resistencia encontrada para la mayor parte de las observaciones en este estudio. 
+
+#### (c) caras de Chernoff 
+Para elaborar este diagrama se realizó una selección al azar de 100 observaciones, esto con el fin de poder visualizar y especificar mejor cada uno de los rasgos de la caras. Esta estratégia es poco eficiente cuando la cantidad de datos es alta. 
+
+```{r Código para caras de Chernoff, message=FALSE, echo=FALSE, fig.cap= 'Diagrama de caras de Chernoff'}
+multi_faces <- multi_var1[c(1:100), ]
+faces(multi_faces, 
+      cex = 1, 
+      face.type = 1, ncol.plot = 10)
+```
+
+Como se puede ver en la figura 3. y la leyenda que la acompaña, a cada variable se le asigna un conjunto de rasgos, y se evalua para cada una de las observaciones el impacto que tiene cada variable. En este análisis llama la atención la cara de la observación número 76, esta cara es ancha y el pelo es ancho y de estilo particular; esto indica las variables `Carbapenems` y `Fluoroquinolonas` ('width of face' lo que corresponde a `Carbapenems`, 'width of hair' que corresponde también a `Carbapenems` y  'style of hair' que corresponde a  `Fluoroquinolones`) son las más representativas en esta observación. 
+
+#### (d) curvas de Andrews
+Para este gráfico se definió evaluar la consistencia y correlaciones de las variables númericas dadas con relación a una variable categórica `Year`. Se definió esta variable como `factor` y se incluyo en el análisis. 
+
+```{r Código para curvas de Andrews, message=FALSE, echo=FALSE, fig.cap= 'Curvas de Andrew'}
+#### Curvas de Andrews
+library(pracma)
+matrix_multi1 <- as.matrix(multi_var1)
+year <- as.factor(E.coli_K.pneu_db[,2])
+andrewsplot(matrix_multi1, year, style = "cart")
+```
+
+En la figura 4. se observa que la dimesionalidad de las curvas esparcialmente constante. Algunas se observaciones se comportan más planas y otras más onduladas lo que corresponde a observaciones que tiene dimensionalidades con relación al los años distintas al conjunto de datos. 
+
+#### (e) otros gráficos apropiados
+Además se eleaboraron gráficos tipo "boxplots" para cada una de las variables que corresponden a los porcentajes de resistencia a determinado antibiótico; esto se analizó por año, tipo de bacteria y region. 
+
+
+
+```{r Código Boxplot 1, message=FALSE, echo=FALSE, fig.cap= 'Boxplot 1: resistencia a Aminoglucosidos por bacteria y region en tiempo'}
+##otras gráficas Aminoglycosides
+pD1.1 <- ggplot(E.coli_K.pneu_db, aes(x=factor(Year), y=Aminoglycosides, fill=Bacteria))
+pD2.1 <- pD1.1 + geom_boxplot()
+pD3.1 <- pD2.1 + facet_grid(. ~ factor(Region))
+pD4.1 <- pD3.1 + ggtitle("Resistencia a Aminoglucosidos por bacteria y region")
+pD5.1 <- pD4.1 + theme(axis.text.x = element_text(angle = 90)) + 
+    theme(legend.position="bottom")
+print(pD5.1)
+```
+
+El Boxplot 1. corresponde a al análisis de la resistencia de las dos bacterias seleccionadas para este ejercicio (_Escherichia coli; Klebsiella pneumoniae_) al grupo de antibióticos conocido como "aminoglucosidos". Para este grupos evidencia un incremento leve de la resistencia a los antbióticos de los dos tipos de bacteria en el tiempo. La bacteria que exhibe mayores porcentajes y varianza en la resistencia a los antibióticos es la _Klebsiella pneumoniae_, esto es particularmente relevante para las regiones del este y sur de europa (Èastern`, `Southern`). Llama la atención que en estas regiones el incremento de los resportes de resistencia a aminoglucosidos incremento en el 2005, esto puede estar correlacionado con mayor reporte de niveles de resistencia y mayor conciencia de la problemática mundial con respecto a la resistencia a antibióticos. 
+
+```{r Código Boxplot 2, message=FALSE, echo=FALSE, fig.cap= 'Boxplot 2: resistencia a Carbapenems por bacteria y region en tiempo'}
+pD1.2 <- ggplot(E.coli_K.pneu_db, aes(x=factor(Year), y=Carbapenems, fill=Bacteria))
+pD2.2 <- pD1.2 + geom_boxplot()
+pD3.2 <- pD2.2 + facet_grid(. ~ factor(Region))
+pD4.2 <- pD3.2 + ggtitle("Resistencia a Carbapenems por bacteria y region")
+pD5.2 <- pD4.2 + theme(axis.text.x = element_text(angle = 90)) + 
+    theme(legend.position="bottom")
+print(pD5.2)
+```
+
+El Boxplot 2. que se encuentra gráficado en la figura 6. resulta particularmente interesante, dado que muestra la baja frecuencia de resistencia al grupo de antibióticos conocido como `Carbapenems`. Al igual que con los Animoglucosidos, la bacteria que reporta mayor resistencia es la _Klebsiella pneumoniae_ para las regiones de este y sur de europa. En este caso el incremento de resistencia incia desde el año 2009. Esta información, asociada a las correlaciones mostradas en la figura 1. muestran el poco peso que tienen los Carbapenemicos en la resistencia total a los antibióticos y la resistencia combinada. 
+
+
+```{r Código Boxplot 3, message=FALSE, echo=FALSE, fig.cap= 'Boxplots 3: resistencia a Fluoroquinolonas por bacteria y region en tiempo'}
+pD1 <- ggplot(E.coli_K.pneu_db, aes(x=factor(Year), y=Fluoroquinolones, fill=Bacteria))
+pD2 <- pD1 + geom_boxplot()
+pD3 <- pD2 + facet_grid(. ~ factor(Region))
+pD4 <- pD3 + ggtitle("Resistencia a Fluoroquinolonas por bacteria y region")
+pD5 <- pD4 + theme(axis.text.x = element_text(angle = 90)) + 
+    theme(legend.position="bottom")
+print(pD5)
+```
+
+El boxplot número 4. representa el porcentaje de resistencia al grupo de antibióticos "Fluoroquinolonas". Respecto a este grupo, se observa un incremento en el tiempo de la resistencia en todas las regiones y para las dos bacterias. Las regiones del occidente de europa `western` se evidencia un incremento inicial y una estabilización de este comportamiento desde el 2009. Las regiones de sur y este de europa se ve el mayor incremento y variabilidad en la resistencia especialmente en la bacteria _Klebsiella pneumoniae_, desde el 2005. Que al igual a los casos anteriores puede estar dada al incremento y frecuencia del reporte. 
+
+
+```{r Código Boxplot 4, message=FALSE, echo=FALSE, fig.cap= 'Boxplot 4: resistencia a Cefalosporinas de 3 generación por bacteria y region en tiempo'}
+pD1.3 <- ggplot(E.coli_K.pneu_db, aes(x=factor(Year), y=cephalos_3er_gen, fill=Bacteria))
+pD2.3 <- pD1.3 + geom_boxplot()
+pD3.3 <- pD2.3 + facet_grid(. ~ factor(Region))
+pD4.3 <- pD3.3 + ggtitle("Resistencia a Cefalosporinas de 3 generación por bacteria y region")
+pD5.3 <- pD4.3 + theme(axis.text.x = element_text(angle = 90)) + 
+    theme(legend.position="bottom")
+print(pD5.3)
+```
+
+Finalmente la figura 8 muestra la resistencia a las ceaflosporinas de 3er generación. Para estas el incremento de la resistencia presenta un incremento sostenido en el tiempo. De la misma forma la bacteria _Klebsiella pneumoniae_ es la que presenta mayores niveles y variabilidad de la resistencia, especialmente en la región del sur y este de europa, siendo mayor en esta última desde el 2005. 
+
+
+### Cuarta pregunta:
+>Investigue si su conjunto de datos proviene de una distribución normal
+multivariada.
+
+Para comprar la normalidad de los datos se decidió comprobar a través de un test de Shapiro-Wilk multivariado, el cual permite constatar la normalidad del conjunto de observaciones, y se formula de la siguiente manera (donde $N$ indica una distribución normal: 
+
+$$
+H_o: el\ conjunto \ de\ datos = N
+$$
+
+$$
+H_1: el\ conjunto \ de\ datos \neq N 
+$$
+
+
+```{r test de shapiro-wilk para normalidad_multivariado, echo=FALSE, message=FALSE, results='asis'}
+shapiroWtB <- mshapiro.test(t(matrix_multi1))
+NamesSW <- c('$W$', '$p-value$')
+shapirowtdb <- data.frame(matrix(nrow = 1, c(shapiroWtB$statistic, shapiroWtB$p.value)))
+colnames(shapirowtdb) <- NamesSW
+pandoc.table(shapirowtdb, 
+             caption = 'Test de shapiro-wilk (w) para los datos', 
+             align = 'c', 
+             split.table = Inf,
+             digits = 4)
+```
+
+El resultado obtenido de este estadístico es presentado en la tabla 5. lo que arroja un valor de $W =0.469$ significativo ($p - value < 0.05$), por tal razón, se rechaza la hipotesis nula, así que se puede aseverar los datos no siguen una distribución normal ($N$). 
+
+
+

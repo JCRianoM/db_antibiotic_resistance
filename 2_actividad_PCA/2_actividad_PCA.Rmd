@@ -1,0 +1,298 @@
+---
+title: "Taller 4: Análisis Multivariado"
+subtitle: "Análisis de conglomerados (Clusters)"
+author: "Julián Camilo Riaño Moreno"
+date: "`r format(Sys.Date(), '%A, %B %d, %Y')`"
+output:
+  pdf_document: 
+    keep_tex: yes
+    toc: yes
+    toc_depth: 3
+  html_document: 
+    keep_md: true
+    toc: yes
+    toc_float: true
+    code_folding: hide
+  keep_tex: yes
+  word_document: default
+  fig_cap: yes
+header-includes:
+- \usepackage{float}
+- \floatplacement{figure}{H}
+---
+
+```{r setup, include=FALSE}
+# define knitr options
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = TRUE, fig.pos= "h")
+```
+
+```{r, include=FALSE}
+# instalar paquetes. 
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(kableExtra)
+library(knitr)
+library(ggcorrplot)
+library(ggthemes)
+library(GGally)
+library(pander) ##paquete para tablas pandoc
+library(reshape2)##arreglar imagenes
+library(ggrepel)
+library(FactoMineR)
+library(factoextra)
+library(tidyverse)
+```
+
+
+```{r carga de datos y construcción de datos para ejercicio, include = FALSE}
+E.coli_K.pneu_db <- read.csv2('E.coli_&_K.pneu_db', header=TRUE)
+multi_var1 <- as_tibble(E.coli_K.pneu_db[, -c(1:4, 9)])
+R_multi1 <- round(cor(multi_var1), 2)
+v_multi1 <- round(var(multi_var1), 2)
+matrix_multi1 <- as.matrix(multi_var1)
+```
+
+```{r elaboración de PCA, include=FALSE}
+multi1_PCA<- PCA(matrix_multi1, scale.unit = TRUE, graph = F, quanti.sup = 2)
+
+```
+
+
+## Actividad #2
+>Realice un análisis de componentes principales (ACP) sobre las variables cuan-
+titativas (por lo menos 5) de una base de datos relacionada con su área de
+conocimientos. Muestre el porcentaje de varianza explicado por cada dimensión.
+Basado en el autovalor medio o en un diagrama de sedimentación, decida cúantos
+componentes debe retener. Determine la calidad de representación de las vari-
+ables respecto a las componentes seleccionadas y la contribución que realiza
+cada varaible a la construcción de cada componente. Defína e interprete los
+componentes principales obtenidos.
+
+## Especificaciones sobre la base de datos utilizada.
+
+Para esta actividad se utilizó la misma base de datos descrita en la actividad 1 del curso de análisis multivariado de la especialización en estadística aplicada, durante el curso del 2020-1. A modo de resumen, se trata de una base de datos corresponde a las frecuencias o porcentaje de resistencia a 4 grupos de antibióticos (Carbapenems, Aminoglucosidos, Fluoroquinolonas y cefalosporinas de 3er generación), en aislados de dos bacterias _Escherichia coli; Klebsiella pneumoniae_; los datos fueron obtenidos en 30 países de las 4 regiones (Sur, norte, este y oeste) de Europa durante los años 2000 al 2018. Se tienen 9 variables: `Bacteria`, `Year`, `Code_C`, `Country`, `Aminoglycosides`, `Carbapenems`, `Fluoroquinolones`, `cephalos_3er_gen`. 
+
+Para efectos de esta actividad se extrajeron únicamente las variables de caracter cuantitativo como son las frecuencias de resistencia a cada uno de los grupos de antibióticos. 
+
+Debido a las conclusiones previo realizado de correlacción, varianza y distribución de estas variables se consideró que el grupo de los `Carbapenems` presenta baja correlación con las demás variables y para la elaboración de los componentes principales esta variable se asignó como una variable _cuantitativa suplementaria_ a través del argumento `quanti.sup`de la función `PCA` del paquete estadístico `factomineR`. Con esto el análisis de APC se realizó únicamente con tres variables centrales: `Aminoglycosides`, `Fluoroquinolones`, `cephalos_3er_gen`. 
+
+## Solución de la actividad:
+Para desarrollar la actividad se realizó un análisis a través de las funciones encontradas en el paquete `factomineR` y `factoextra`. 
+
+
+```{r eigenvalue tabla, echo=FALSE, message=FALSE, results='asis'}
+eig.val_multi1 <- get_eigenvalue(multi1_PCA)
+
+pandoc.table(eig.val_multi1,
+             caption = 'Matriz de *eigenvalues*',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+```
+
+### Descripción de los componentes principales. 
+
+La tabla 1 muestra los resultados de los valores propios o _eigenvalues_ de cada una de las componentes principales obtenidas a través del modelo aplicado. Cada componente esta definida como `Dim`. También se puede encontrar la varianza explicada por cada una de las componentes obtenidas. Desde el punto de vista estadístico según este resultado y aplicando el _criterio de Kaiser_ se puede definir que la unica componente que debería ser retenida es la primera (`Dim1`), dado que su valor es $> 1$ (2.773) esto indica que tan solo esta componente explica más la variabilidad de las observaciones que cada una de las variables originales. Además, esta aseveración es soportada en buena medida por el estandar de explicación de varianza de 80% utilizado por buena parte de los estadísticos. Tal como se observa en el la tabla 1 y en la figura 1. la componente 1, explica el 92.45% de la variabilidad de los datos. 
+
+
+```{r gráfica varianza explicada, echo=FALSE, message=FALSE, fig.cap= 'ScreePlot de los valores propios para cada variable'}
+fviz_eig(multi1_PCA, addlabels = TRUE, ylim=c(0,80), xlab = 'Dimensiones', 
+         ylab = 'Porcentaje de la varianza explicada') 
+```
+
+
+De la misma forma la figura 1. al aplicar el _"criterio del codo"_, que es una valoración cualitativa de la figura 1, dada por la exigencia de retenciaón de las componentes anteriores al punto de máxima flexión entre las curva de dibujada entre el centro de todas las componentes principales. En este caso, se evidencia que está flexión máxima se encuentra en la componente 2, por tanto, se exige la retención de únicamente de la componente 1. 
+
+
+```{r PCA varianza coordinados, echo=FALSE, message=FALSE, results='asis'}
+multi1PCA_var <- get_pca_var(multi1_PCA)
+
+pandoc.table(multi1PCA_var$coord,
+             caption = 'Matriz de coordinadas de las variables',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+
+```
+
+```{r PCA varianza cos2, echo=FALSE, message=FALSE, results='asis'}
+pandoc.table(multi1PCA_var$cos2,
+             caption = 'Vector de $cos^2$ de las variables',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+```
+
+### Gráficas, coordenadas, $cos^2$ y contribuciones en los componentes principales. 
+
+La tabla 2. muestra la posición en el plano factorial de cada una de las varibles respecto a su componente principal. Esto deja ver que, en las figuras 2 y 3, los vectores de las tres variables se dirigen hacia la porción positiva del eje y en el plano, lo que corresponde al plano de la componnente principal 1. A diferencia de lo ocurrido con la componente principal 2, dónde tanto la variable `Cephalos_3er_gen` y `aminoglucoside`están en el plano negativo de esta componente. 
+
+```{r GRÁFICA 2 PCA varianza, echo=FALSE, message=FALSE, results='asis', fig.cap='Gráfica de calidad de la representación por $cos^2$ de las variables'}
+fviz_pca_var(multi1_PCA, col.var = 'cos2',
+             repel = TRUE, labelsize = 3)
+```
+
+Por otra parte, la figura 2 y 3 muestran que los angulos de las líneas obtenidas para cada una de la variables originales a través del análisis de compnentes prinicipales y que corresponden a `Cephalos_3er_gen` y `aminoglucoside` son muy cercanos de manera que confirma que existe una alta correlación entre estas dos variables; en el caso de la variable `Fluoroquinolone`cuyo angulo es mayor con respecto a las otras dos, lo que indica menor correlación entre estas. 
+
+```{r PCA varianza Contribuciones, echo=FALSE, message=FALSE, results='asis'}
+pandoc.table(multi1PCA_var$contrib,
+             caption = 'Matriz de contribuciones por variables',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+```
+
+La tabla 3. muestra los valores de $cos^2$ de las componentes prinicipales, lo que corresponde a la importancia de un componente principal para cada una de las variables originales. Esto quiere decir que la dimensión 1 tiene la mayor importancia con la variable `Aminoglicoside`(0.9439) que lo que tienen las componentes 2 (0.03966) y 3 (0.01647); lo mismo sea dicho para las otras dos variables. 
+
+Esto se puede evidencia en la figura 2. a través de un sistema de color (azul), siendo, el más oscuro la calidad de la representación de la componente en la variable y más claro la menos calidad. 
+
+
+```{r GRÁFICA 3 PCA varianza, echo=FALSE, message=FALSE, results='asis', fig.cap='Gráfica de contribución de las variables en las componentes'}
+fviz_pca_var(multi1_PCA, col.var="contrib", labelsize = 3) +
+    scale_color_gradient2(low="white", mid="blue",
+                          high="red", midpoint=33) +
+    theme_minimal()
+```
+
+
+```{r GRÁFICA contribución 1, echo=FALSE, message=FALSE, fig.cap='Contribuciones de las variables en cada la componente principa 1' }
+## Grafica de la contribución de las variables a la componente 1
+fviz_contrib(multi1_PCA, 
+             choice = "var",
+             axes = 1, top=10, 
+             fill = "lightgray", 
+             color = "black") +
+    ggtitle('Contribución de las variables al componente 1') +
+    ylab('Contribuciones (%)') + 
+  xlab('') + 
+  theme_minimal()
+    
+
+```
+
+
+
+Seguidamente, se realiza una gráfica de contribuciones de variables a las compomentes principales obtenidas. Esta información se encuentra en la tabla 4. La gráfica de contribuciones, figura 2. Como se puede observar, se realiza una discriminación por color dónde el color rojo indica la máxima contribución de la variable al componente relacionado y el colo azul es la menor. Si bien el vector de la variable `Fluoroquinolones` se ve de color rojo por su alta contribución no se hace al componente prinicipal 1, sino al 2. Aproximadamente el 68% del compomente 2 es consecuencia de la variable  `Fluoroquinolones`. Mientras que su contribución en el compomente 1 es de 31.38%. 
+
+
+
+```{r GRÁFICA contribución 2, echo=FALSE, message=FALSE, fig.cap='Contribuciones de las variables en cada la componente principa 2' }
+## La línea roja la contribución promedio esperada (1/numero_variables)
+
+## Grafica de la contribución de las variables a la componente 2
+fviz_contrib(multi1_PCA, choice = "var", axes = 2, top=10,  
+             fill = "lightgray", color = "black") + 
+    ggtitle('Contribución de las variables al componente 2') +
+    ylab('Contribuciones (%)') + 
+  xlab('') + 
+  theme_minimal()
+    
+```
+
+
+
+Cabe resaltar también el vector de la variable suplementaria `Carbapenems` que como se predijo a través de los resultados preliminares, contribuye muy poco en las componentes principales resultantes. El peso de su contribución se da en color azul y la distancia del vector desde el centro del plano es corta lo que sugiere que contribuye poco a todas las compomentes, y su mayor contribución es al componente 1. 
+
+Las figuras 4, 5 y 6. corresponde a gráficas de barras que comparan el % de contribucion de cada una de las variables para cada una de las componentes principales. En cada una de estas gráficas se trazó una línea roja que corresponde al contribución promedio esperada. Esto indica que la variable que supere este valor umbrar contribuye más que de lo esperado por las variables originales. 
+
+
+```{r GRÁFICA contribución 3, echo=FALSE, message=FALSE, fig.cap='Contribuciones de las variables en cada la componente principa 3' }
+## Grafica de la contribución de las variables a la componente 3
+fviz_contrib(multi1_PCA, choice = "var", axes = 3, top=10,  
+             fill = "lightgray", color = "black") + 
+    ggtitle('Contribución de las variables al componente 3') +
+    ylab('Contribuciones (%)') + 
+  xlab('') + 
+  theme_minimal()
+    
+
+```
+
+Por su parte, la figura 4. muestra que las variables `cephalos_3er_gen` y `Aminoglycosides` son las que contribuyen en mayor medida a la componente principa 1 en una medida mayor que el la contribución esperada. 
+
+```{r GRÁFICA individuos por contribución 2, echo=FALSE, message=FALSE, fig.cap='Gráfica de la distribución y contribuciones de las observaciones en las componentes principales'}
+## La línea roja la contribución promedio esperada (1/numero_variables)
+
+fviz_pca_ind(multi1_PCA, 
+             col.ind="contrib",
+             pointshape = 21, 
+             pointsize = 2,
+             alpha.var ="contrib", 
+             col.var = "contrib") +
+    scale_color_gradient2(low="white", 
+                          mid="blue",
+                          high="red", 
+                          midpoint=0.6)
+
+```
+
+
+La figura 5. muestra que las variables `Fluoroquinolones` es la que contribuye en mayor medida a la componente principa 2 en una medida mayor que el la contribución esperada. 
+
+Finalmente la figura 6. muestra que las variables `cephalos_3er_gen` y `Aminoglycosides` son las que contribuyen en mayor medida a la componente principa 3 en una medida mayor que el la contribución esperada; sin embargo, esta componente no se puede obervar en las figuras 2 y 3, y tampoco es mandatorio retenerla en este análisis. 
+
+Se Adicionó una gráfica de contribución de las observaciones en las componentes principales (figura 7) en esta podemos obervar que la mayor parte de las observaciones se encuentra cercanas al centro del plano factorial. Sin embargo la dispersión de las observaciones tiende hacia la derecha, es decir hacia el plano positivo del eje y, lo que corresponde a la componente principal 1. Se realizó una discriminación por color de la contribución: las observaciones de color rojo son las de mayor contribución en las componentes y las de color más grisaceo son las de menos contribución con una contribución intermedia las de color azul. Como se puede ver las observaciones 530 y 503 (outsiders) son las que más aportan en la componente 1 de manera individual. 
+
+### Análisis multivariado de APC
+
+```{r GRÁFICA Biplot por región, echo=FALSE, message=FALSE, results='asis', fig.cap='Gráfica de las componentes principales y la distribución de observaciones por region'}
+###Biplot organizado por region
+fviz_pca_biplot(multi1_PCA, 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = E.coli_K.pneu_db$Region, col.ind = "white",
+                pointshape = 21, 
+                pointsize = 2,
+                palette = "jco",
+                labelsize = 3,
+                addEllipses = TRUE,
+                # Variables
+                alpha.var ="contrib", 
+                col.var = "contrib",
+                gradient.cols = "RdBu") + 
+    labs(fill = "Bacteria", 
+         color = "Contribución", 
+         alpha = "Contribución") +
+    theme(legend.title = 
+              element_text(face = "bold")) # Change legend title
+
+```
+
+Se realizaron dos análisis más que pueden encontrarse en las figuras 8 y 9. Estos corresponde a un gráfico tipo _Biplot_ que permite hacer discriminaciones de las observaciones en le plano factoria introduciendo variables categóricas. Este análisis es particularmente interesante ya que se realizó una discriminación de las observaciones en el plano a través de especie de `Bacteria` (figura 9) y por `Region` (figura 8). 
+
+La figura 8, preve algunos resultados que se verán en el análisis de Clusters que se realizará más adelante. En este se encuentra que los paises del este europeo `Eastern`son los que más contribuyen en la componente principal 1. Aquí tambien se encuentran algunos países de la región sur de europa y el norte, sugieriendo que los países del oeste `Western` son los que menos contribuyen a la resistencia antibiótica. En especial los paises del este contribuye a la resistencia atibiótica de grupos como la Aminoglucosidos y las cefalosporinas de tercera generación, que son antibióticos última línea para el tratamiento de las infecciones producidas por estas dos bacterias. 
+
+
+```{r GRÁFICA Biplot por bacteria, echo=FALSE, message=FALSE, results='asis', fig.cap= 'Gráfica de las componentes principales y la distribución de observaciones por especie de bacteria'}
+######Biplot por Bacteria
+fviz_pca_biplot(multi1_PCA, 
+                # Individuals
+                geom.ind = "point",
+                fill.ind = E.coli_K.pneu_db$Bacteria, 
+                col.ind = "white",
+                pointshape = 21,
+                pointsize = 2,
+                palette = "Dark2",
+                addEllipses = TRUE,
+                labelsize = 3,
+                # Variables
+                alpha.var ="contrib", 
+                col.var = "contrib",
+                gradient.cols = "RdBu", 
+                repel = TRUE) + 
+    labs(fill = "Bacteria", 
+         color = "Contribución", 
+         alpha = "Contribución") +
+    theme(legend.title = 
+              element_text(face = "bold"))# Change legend title
+
+```
+
+Por último, la figura 9, muestra un la dispersión de las observaciones en le plano factoria y agrupadas por tipo de bacteria. Como se veía en el primer análisis realizado, la bacteria Klebsiella Pneumoniae es la que más contribuye a la resistencia antibiótica. Esto queda soportado, dado que se evidencia una amplia diferencia en la distribución de las observaciones que corresponden a esta en la componente principal 1, particularmente interesante es que contribuyen a la a resistencia atibiótica de grupos como la Aminoglucosidos y las cefalosporinas de tercera generación y que aunado con los resultados de la figura 8, se puede sugerir que el impacto mayor de esta resistencia es el los países del este de europa. 
+
+
+

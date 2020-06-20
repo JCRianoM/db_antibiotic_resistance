@@ -1,0 +1,299 @@
+---
+title: "Taller 3: Análisis Multivariado"
+subtitle: "Análisis de correspondencias"
+author: "Julián Camilo Riaño Moreno"
+date: "`r format(Sys.Date(), '%A, %B %d, %Y')`"
+output:
+  pdf_document: 
+    keep_tex: yes
+    toc: yes
+    toc_depth: 3
+  html_document: 
+    keep_md: true
+    toc: yes
+    toc_float: true
+    code_folding: hide
+  keep_tex: yes
+  word_document: default
+  fig_cap: yes
+header-includes:
+- \usepackage{float}
+- \floatplacement{figure}{H}
+---
+
+```{r setup, include=FALSE}
+# define knitr options
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = TRUE, fig.pos= "h")
+```
+
+```{r, include=FALSE}
+# instalar paquetes. 
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(gridExtra)
+library(kableExtra)
+library(knitr)
+library(ggcorrplot)
+library(ggthemes)
+library(GGally)
+library(pander) ##paquete para tablas pandoc
+library(reshape2)##arreglar imagenes
+library(ggrepel)
+library(FactoMineR)
+library(cluster)
+library(factoextra)
+library(dendextend)
+library(magrittr)
+library(gplots) 
+
+```
+
+
+```{r carga de datos y construcción de datos para ejercicio 2 variables, include = FALSE}
+political_moral16ct_db <- read.csv2('political_moral_16cat.csv', header=TRUE)
+View(political_moral16ct_db)
+
+pol_moral16cat <- political_moral16ct_db %>% gather(Key, political_, -moral_circ) %>%
+    group_by(moral_circ, political_) %>%
+    summarise(count = n())  %>%
+    spread(political_, count, fill = 0) %>%
+    as.data.frame()
+
+nrows_16cat <- pol_moral16cat[, 2:4]
+
+#####################################################
+rownames(nrows_16cat) <- pol_moral16cat$moral_circ
+###########BASE DE DATOS DE TRABAJO##################
+#####################################################
+```
+
+```{r Matriz de trabajo dos variables, include=FALSE}
+pol_moral16matrix <- as.table(as.matrix(nrows_16cat))
+```
+
+## Actividad 3
+
+>Elija dos variables categóricas de una base de datos relacionada con su área de
+conocimientos y desarrolle un análisis de correspondencias (AC), mostrando la
+tabla de contingencia, la tabla de frecuencias relativas, la gráficas de barras de
+los perfíles fíla y columna, y la grafíca de los puntos de los perfíles fíla y columna
+superpuestos en el primer plano factorial (biplot). Haga una interpretación
+práctica de los resultados. >Estan relacionadas las dos variables seleccionadas o
+son independientes?
+
+
+## Especificaciones sobre la base de datos utilizada.
+
+Para la actividad de análisis de correlaciones, se decidió utiliza parte de una base de datos resultado de un estudio multicentrico realizado en 61 país dónde participe como investigador principal del equipo de Colombia. El estudio tiene como título _COVID19 International Collaboration on Social & Moral Psychology_ y tiene como objetivo, entender las caracteristica morales y sociales de las personas en el mundo durante la pandemia por COVID-19. 
+
+El instrumento aplicado es una encuesta que consta de 41 preguntas definidas por variables categóricas y cuantitativas y fue elaborada y difundida a través del sistema *qualtrics* (https://www.qualtrics.com). En Colombia se lograron obtener 735 encuestados entre el los días 1-4 de abril del 2020. 
+
+A partir de esto se obtuvo una base de datos de 735 filas y 94 columnas. Para desarrollar esta actividad, se decidió seleccionar únicamente dos columnas de interes de manera conveniente para ajustarla para realizar el análisis solicitado. Las columnas seleccionadas fueron las que correspondea: *inclinación política* y *circulo moral*. 
+
+Estas dos corresponden a variables categóricas que fueron asignadas de manera númerica para facilitar el análisis final. Para los fines de esta actividad se decidió hacer una readaptación de la variable *inclinación política* la que originalmente los encuestado debían responder en una escala de 0-10 siendo 0 ultraizquierda y 10 ultraderecha; para facilitar el análisis se decidió realizar rangos y definir las inclinaciones de manera nominal como se muestra en la tabla 2; con lo que se obtuvo únicamente tres categorías de la variable: *izquierda*, *derecha* y *centro.*
+
+La variable *circulo moral* se entiende como el círculo de personas u otras entidades por las cuales la persona se preocupa o procura el bien o el mal que se les pueda hacer. Para evaluar esto se asignaron 16 indicadores [^1] (`Id`) descritos en la tabla 1. a cada uno se les asignó un nombre corto para este ejercicio y mejor interpretación, que tambien se puede apreciar en la tabla 1.
+
+[^1]: En esta escala el número que seleccione incluye todos los números bajo el también. Por ejemplo, si usted selecciona 10 (todos los mamíferos), está incluyendo, también los número 1 al 9 (“todas las personas en todos los continentes) en su círculo moral.
+
+Finalmente y luego de realizar una limpieza de la base de datos, se obtuvo 687 una base de datos final de 687 observaciones, la cual fue utilizada para esta actividad. Seguidamente, esta base de datos fue organizada para obtener una tabla de contingencia dónde la *inclinación política* se ajustó como la variable columna y el *circulo_moral* se asignó como variable fila. 
+
+
+```{r tabla columnas, echo=FALSE, message=FALSE, results='asis'}
+
+nam_x <- c('Id', 'Variable', 'Descripcion')
+y <- c('toda su familia inmediata',  
+       'toda su familia extendida',
+       'todos sus amigos cercanos',
+       'todos sus amigos, incluyendo los distantes',
+       'todos sus conocidos',
+       'todas las personas con las que se ha cruzado',
+       'todas las personas de su pais' ,
+       'todas las personas en su continente',
+       'todas las personas en todos los continentes',
+       'todos los mamiferos',
+       'todos los anfibios, reptiles, mamiferos, peces y aves',
+       'todos los animales en la tierra, incluyendo bacterias y amibas',
+       'todos los animales en el universo, incluyendo formas de vida extraterrestres',
+       'todas las cosas vivientes en el universo, incluyendo plantas y arboles',
+       'todas las cosas naturales en el universo, incluyendo entidades inertes como las rocas',
+       'todas las cosas que existen')
+
+x <- c( "familiar_inmediato", "familiar_extendido",
+        "amigos_cercanos", "amigos_inclu_lejano", "todos_conocidos",
+        "personas_cruzado", "personas_pais", "personas_continente",
+        "personas_mundo", "mamiferos", "animal_cordado", 
+        "animal_bact",  "animal_extrat", "todo_biotico", "biotico_abiotico", 
+        "todo_existente")
+z <- c(1:16)
+
+filas <- data.frame(z, x, y)
+
+colnames(filas) <- nam_x
+
+pandoc.table(filas,
+             caption = 'Tabla de descripción de las variables filas',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+```
+
+```{r tabla filas, echo=FALSE, message=FALSE, results='asis'}
+
+w <- c('Variable', 'Descripcion')
+
+t <- c('derecha', 'izquierda', 'centro')
+
+r <- c('Todos aquellos que marcaron entre 7 y 10', 
+       'Todos aquellos que marcaron entre 0 y 3', 
+       'Todos aquellos que marcaron entre 4 y 6')
+
+columnas <- data.frame(t, r)
+
+colnames(columnas) <- w
+
+pandoc.table(columnas,
+             caption = 'Tabla de descripción de columnas',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+```
+
+
+### Analisis de tablas de contingencia y proporciones. 
+
+Inicialmente se realizó una inserción de los valores marginales a la tabla de contingencia que se trabajó (tabla 3). Esto muestra que la mayor cantidad de las observaciones se obtuvieron de población que se percibe asimisma en una inclinación política de `centro` (n = 373). El grupo de inclinación política menos representado fue `derecha` (n = 115). 
+
+```{r tablas marginales, echo=FALSE, message=FALSE, results='asis'}
+
+marginales_16cat <- addmargins(pol_moral16matrix, c(1,2))
+
+pandoc.table(marginales_16cat,
+             caption = 'Tabla de contingencia y marginales',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+```
+
+Por otra parte, a través de un análisis de proporciones mostrado en la tabla 4. se identificó que el circulo moral más representado en los datos de estudio fue el que corresponde a la categoría `todo_existe` (n = 207, 31.16%), es decir, se puede asignar un estatus moral a cada cosa existente en el universo; el grupo que más contribuyo a esta categoría es `centro` (n = 112, 30.03%). La categoría de menor representación fue `animal_extrat` y `personas_continente`(n = 8 y 7; 1.01% y 1,01% respectivamente). 
+
+```{r tablas proporciones, echo=FALSE, message=FALSE, results='asis'}
+
+proporcion_16cat <- round(prop.table(pol_moral16matrix,2)*100, 2)
+
+pandoc.table(proporcion_16cat,
+             caption = 'Tabla de proporciones',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+```
+
+Para evaluar mejor los datos de las tablas 3 y 4, se decidió realizar una gráfica de barras y esferas de los perfiles (figura 1.), en esta podemos ver que el radio de la esfera en azul representa la proporcion o número de personas representadas en la intersección de dicha fila y columna. En esta imagen se ve claramente lo mencionado anteriormente respecto a la relación entre la categoría `centro` y `todo_existente`. Aca también se puede evidenciar en las barras grises que aparecen en cada uno de los nombres la proporcion de los marginales, confirmando gráficamente lo antes descrito. Además, se puede apreciar mejo como `izquierda`también aporta grandemente a la categoría `todo_existe`. 
+
+```{r GRÁFICA esferas y barras, echo=FALSE, message=FALSE, fig.cap='Gráfica de perfiles' }
+## Grafica de la contribución de las variables a la componente 1
+balloonplot(t(pol_moral16matrix), main ="Circulo moral por disposición política", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE)
+```
+
+
+### Prueba de independencia $ji^2$
+
+Para evaluar la independencia entre las variables estudiadas se decide realizar una prueba de $ji^2$ a través de método de Pearson, con la función `chisq.test`. Esta prueba corresponde a una prueba de hipotesis entendida de la siguiente manera:
+
+$$
+H_o: las\ variables\  son\ independientes
+$$
+
+$$
+H_1: las\ variables\  son\ dependientes
+$$
+
+```{r Prueba de indepencia ji2, echo=FALSE, message=FALSE, results='asis'}
+## Prueba de independencia
+chisq_pol_moral <- chisq.test(nrows_16cat)
+Namesji2 <- c('$ji^2$', '$p-value$')
+ji2_moral<- data.frame(matrix(nrow = 1, c(chisq_pol_moral$statistic, chisq_pol_moral$p.value)))
+colnames(ji2_moral) <- Namesji2
+pandoc.table(ji2_moral, 
+             caption = 'Prueba de independencia por $Ji^2$', 
+             align = 'c', 
+             split.table = Inf,
+             digits = 4)
+```
+
+El resultado de la $ji^2$ puede verse en la tabla 5. El valor del estadístico (44.93) fue obtenido con 30 grados de libertad con un $p - value = 0.03917$ lo que asumiendo un erro estandar de 5% para la prueba se puede concluir que no es posible rechazar la hipotesis nula ($H_0$), de manera que las variables son dependientes.  
+
+### Análisis de corresponencia y gráficas
+
+Se elabora un análisis de correspondencia a través de la función `CA`del paquete `factoextra`. Se obtiene los valores propios (o *eigenvalues*) de las dimensiones mínimas obtenidas del análisis de correspondencia (2). En otras palabras, con tan solo dos dimensiones es posible explicar el 100 % de la varianza de los datos análizados, como se observa en la tabla 6. Del total de la varianza, la dimensión 1 explicar el 54.3 % de la varianza y la dimensión 2 el 45.7% de esta. 
+
+```{r Prueba de correspondencia2, echo=FALSE, message=FALSE}
+## An?lisis de Correspondencias
+res.ca_16cat_moral <- CA(nrows_16cat, graph = FALSE)
+```
+
+La figura 2 corresponde al Scree plot de los % de contribución de las variables en general para cada una de las obtenidas, mostrando que los perfiles entre variables explican en general casi de manera similar las dimensiones 1 y 2. 
+
+```{r Prueba de eigenvalues, echo=FALSE, message=FALSE, results='asis'}
+eig.val_16cat_moral <- get_eigenvalue(res.ca_16cat_moral)
+pandoc.table(eig.val_16cat_moral,
+             caption = 'Tabla de *eigenvalues* y dimensiones',
+             digits = 4,
+             split.table = Inf,
+             align = 'r')
+```
+
+```{r Gráfica de sedimentación, echo=FALSE, message=FALSE, fig.cap='gráfica de sedimentación'}
+## Grafico de sedimentaci?n
+fviz_screeplot(res.ca_16cat_moral) +
+    geom_hline(yintercept=33.33, linetype=2, color="red")
+
+```
+
+
+
+### Biplots y contribuciones de las variables. 
+
+Finalmente se realizaron dos tipos de Biplots, uno de estos simétrico (figura 3) y un biplot asimétrico (figura 4.). Para darle mayor sentido las gráficas se les asignó color en cuanto al peso de contribución para la vector fila como a la variable columna. 
+
+```{r biplor de las categorias, echo=FALSE, message=FALSE, fig.cap='Biplot de las variables categóricas'}
+
+fviz_ca_biplot(res.ca_16cat_moral, 
+               repel = TRUE, 
+               col.col = "contrib", 
+               alpha.row ="contrib",
+               labelsize = 2,
+               pointsize = 4) +
+    scale_color_gradient2(low = "white", mid = "blue",
+                          high = "red", midpoint = 25) +
+    theme_minimal()
+
+```
+
+En el caso del Biplot simétrico (figura 3.) se puede observar que las vector columna fue representada con colores que van de rojo para la máxima contribución de la variable a la dimensión y azul la menor contribución. En el caso de la vector fila, se asigno azul oscuro para la mayor contribución y azul más claro (o gris) para la menor contribución. En el caso del biplot asimétrico se le asignó tanto a la vector fila como al vector columna, color rojo a la máxima contribución y azul a la mínima contribución. 
+
+```{r biplo asimétrico de las categorias, echo=FALSE, message=FALSE, fig.cap='Biplot de las variables categóricas'}
+
+fviz_ca_biplot(res.ca_16cat_moral,
+               map="rowprincipal", 
+               col.row = "contrib", 
+               col.col = "contrib",
+               arrow=c(TRUE,TRUE),
+               labelsize = 2,
+               repel=TRUE) +
+    scale_color_gradient2(low="white", mid="blue",
+                          high="red", midpoint=10)
+```
+
+El Biplot simétrico deja ver algunos perfiles particulares entre las variables. En primer lugar la categoría `derecha` se encuentra muy cercana al eje y, lo que sugiere que esta vector es muy parecida al perfil promedio o esperado para la observación. Sin embargo, como se puede observar que es dentro de la variable columna la categoría que más aporta a la segunda dimensión del plano factorial; lo mismo puede ser dicho de la categoría `persona_mundo` de la vector fila. En este punto, se divisa un perfil de alta contribución de ambas categorías. Lo que sugiere que el circulo moral de la personas que se autoperciben como de derecha incluye una visión antropocentrica dónde es el ser humano el centro de las categorías morales. 
+
+Por otra parte, la categoría `izquierda` dentro del vector columna es el que más contribuye a la primera dimensión, al igual que `persona_pais`en el vector fila, aunque estos estén cercanos al eje x, es decir al perfil promedio, es posible identificar un perfil particular de relación entre estas dos categorías. Se podría sugerir de esto, que las personas que se perciben como de izquierda pueden tener un circulo moral de carcter más nacionalista. 
+
+En el caso de la categoría `centro` es la más cercana al 0 y se encuentra en el lado negativo x, y, lo que sugiere que esta categoría es la que menos contribuye a las dimensiones generadas, e incluso, las categorías que aparecen en su rededor (también cercanas a 0) contribuyen poco al análisis (esto se puede ver en la relación de color para cada categoría). 
+
+Un análisis similar se puede obtener de la figura 4. En este biplot asimétrico se puede observar la magnitud de los vectores contruidos para cada categoría y su relación angular entre los vectores columna y los vectores fila, además de sus contribuciones en las dimensiones. Como se puede ver los vectores columna, `derecha` e `izquierda` son los que más contribuyen al análisis de perfiles. En el caso de los vectores fila, se observa que la mayor parte ellos tiene vectores cortos desde el 0 lo que sugiere su baja contribución; sin embargo, cabe destacar que `derecha` y `persona_mundo` tienen un angulo muy agudo lo que apunta a lo dicho anteriormente, la definición de un perfil de relación entre las dos variables a través de estas categorías; lo que es también perceptible en el caso de `izquierda` y `persona_pais`. 
